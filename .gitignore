@@ -1,0 +1,5 @@
+# Build-specific folders
+build
+
+# IDE specific folders
+.vscode
