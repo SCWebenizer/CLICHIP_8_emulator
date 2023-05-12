@@ -9,7 +9,7 @@
 
 
 /* Constant values */
-#define CONST_STEPS_COUNT 512
+#define CONST_STEPS_COUNT 712
 
 #define CONST_ARGC 2
 #define CONST_OK 0
@@ -338,6 +338,7 @@ void execute_instruction(void)
                 case 0xD:
                         // DXYN - Draws a sprite at coordinate (VX, VY) that has a width of 8 pixels and a height of N pixels
                         printf("draw(V%01x, V%01x, %01x)", (instruction & 0x0F00) >> 8, (instruction & 0x00F0) >> 4, instruction & 0x000F);
+                        // TODO
                         break;
                 case 0xE:
                         // Multiple cases.
@@ -346,10 +347,12 @@ void execute_instruction(void)
                                 case 0x009E:
                                         // EX9E - Skips the next instruction if the key stored in VX is pressed
                                         printf("if (key() == V%01x)", (instruction & 0x0F00) >> 8);
+                                        // TODO
                                         break;
                                 case 0x00A1:
                                         // EXA1 - Skips the next instruction if the key stored in VX is not pressed
                                         printf("if (key() != V%01x)", (instruction & 0x0F00) >> 8);
+                                        // TODO
                                         break;
                                 default:
                                         // Unknown case
@@ -363,38 +366,47 @@ void execute_instruction(void)
                                 case 0x0007:
                                         // FX07 - Sets VX to the value of the delay timer
                                         printf("V%01x = get_delay()", (instruction & 0x0F00) >> 8);
+                                        // TODO
                                         break;
                                 case 0x000A:
                                         // FX0A - A key press is awaited, and then stored in VX (blocking operation, all instruction halted until next key event)
                                         printf("V%01x = get_key()", (instruction & 0x0F00) >> 8);
+                                        // TODO
                                         break;
                                 case 0x0015:
                                         // FX15 - Sets the delay timer to VX
                                         printf("delay_timer(V%01x)", (instruction & 0x0F00) >> 8);
+                                        // TODO
                                         break;
                                 case 0x0018:
                                         // FX18 - Sets the sound timer to VX
                                         printf("sound_timer(V%01x)", (instruction & 0x0F00) >> 8);
+                                        // TODO
                                         break;
                                 case 0x001E:
                                         // FX1E - Adds VX to I. VF is not affected
                                         printf("I += V%01x", (instruction & 0x0F00) >> 8);
+                                        // TODO
                                         break;
                                 case 0x0029:
                                         // FX29 - Sets I to the location of the sprite for the character in VX
                                         printf("I = sprite_addr[V%01x]", (instruction & 0x0F00) >> 8);
+                                        // TODO
                                         break;
                                 case 0x0033:
                                         // FX33 - Stores the binary-coded decimal representation of VX, with the hundreds digit in memory at location in I, the tens digit at location I+1, and the ones digit at location I+2
                                         printf("set_BCD(V%01x); (I+0) = BCD(3); (I+1) = BCD(2); (I+2) = BCD(1);", (instruction & 0x0F00) >> 8);
+                                        // TODO
                                         break;
                                 case 0x0055:
                                         // FX55 - Stores from V0 to VX (including VX) in memory, starting at address I. The offset from I is increased by 1 for each value written, but I itself is left unmodified
                                         printf("reg_dump(V%01x, &I)", (instruction & 0x0F00) >> 8);
+                                        // TODO
                                         break;
                                 case 0x0065:
                                         // FX65 - Fills from V0 to VX (including VX) with values from memory, starting at address I. The offset from I is increased by 1 for each value read, but I itself is left unmodified
                                         printf("reg_load(V%01x, &I)", (instruction & 0x0F00) >> 8);
+                                        // TODO
                                         break;
                                 default:
                                         // Unknown case
