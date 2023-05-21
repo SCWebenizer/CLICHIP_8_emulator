@@ -555,19 +555,32 @@ void execute_instruction(void)
                                         break;
                                 case 0x0029:
                                         // FX29 - Sets I to the location of the sprite for the character in VX
-                                        printf("I = sprite_addr[V%01x]", (instruction & 0x0F00) >> 8);
-                                        // TODO
+                                        regX = get_regX(instruction);
+                                        printf("I = sprite_addr[V%01x] [X]", regX);
+                                        if (state.regs.regV[regX] > CONST_OPCODE_REGISTER_MASK)
+                                        {
+                                                printf("\nValue from register is bigger than 0x0F, looking only at the least significant hex digit\n");
+                                        }
+                                        // else
+                                        // {
+                                        state.regs.regI = (state.regs.regV[regX] % CONST_OPCODE_REGISTER_MASK) * 5;
+                                        state.PC += CONST_REGISTERS_IR_INCREMENT;
+                                        // }
                                         break;
                                 case 0x0033:
                                         // FX33 - Stores the binary-coded decimal representation of VX, with the hundreds digit in memory at location in I, the tens digit at location I+1, and the ones digit at location I+2
-                                        printf("set_BCD(V%01x); (I+0) = BCD(3); (I+1) = BCD(2); (I+2) = BCD(1);", (instruction & 0x0F00) >> 8);
-                                        // TODO
+                                        regX = get_regX(instruction);
+                                        printf("set_BCD(V%01x); (I+0) = BCD(3); (I+1) = BCD(2); (I+2) = BCD(1); [X]", regX);
+                                        state.mem[state.regs.regI] = state.regs.regV[regX] / 100;
+                                        state.mem[state.regs.regI + 1] = (state.regs.regV[regX] / 10) % 10;
+                                        state.mem[state.regs.regI + 2] = state.regs.regV[regX] % 10;
+                                        state.PC += CONST_REGISTERS_IR_INCREMENT;
                                         break;
                                 case 0x0055:
                                         // FX55 - Stores from V0 to VX (including VX) in memory, starting at address I. The offset from I is increased by 1 for each value written, but I itself is left unmodified
                                         regX = get_regX(instruction);
                                         printf("reg_dump(V%01x, &I) [X]", regX);
-                                        for (data = 0; data < regX; data++)
+                                        for (data = 0; data <= regX; data++)
                                         {
                                                 state.mem[state.regs.regI + data] = state.regs.regV[data];
                                         }
@@ -577,7 +590,7 @@ void execute_instruction(void)
                                         // FX65 - Fills from V0 to VX (including VX) with values from memory, starting at address I. The offset from I is increased by 1 for each value read, but I itself is left unmodified
                                         regX = get_regX(instruction);
                                         printf("reg_load(V%01x, &I) [X]", regX);
-                                        for (data = 0; data < regX; data++)
+                                        for (data = 0; data <= regX; data++)
                                         {
                                                 state.regs.regV[data] = state.mem[state.regs.regI + data];
                                         }
@@ -591,6 +604,30 @@ void execute_instruction(void)
         }
 
         printf("\n");
+}
+
+/* Sets up the hex value fonts in memory in the former interpreter memory space */
+void setup_fonts(void)
+{
+        __uint8_t font_data[] = {0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+                                 0x20, 0x60, 0x20, 0x20, 0x70, // 1
+                                 0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+                                 0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+                                 0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+                                 0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+                                 0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+                                 0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+                                 0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+                                 0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+                                 0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+                                 0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+                                 0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+                                 0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+                                 0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+                                 0xF0, 0x80, 0xF0, 0x80, 0x80};// F
+
+        memcpy(state.mem, font_data, sizeof(font_data));
+        printf("Loaded font data in %ld bytes starting from area 0x000\n", sizeof(font_data));
 }
 
 // TODO break up functions more
@@ -629,6 +666,8 @@ int main(int argc, char **argv)
         // Preparation, set all registers and memory to 0, and I to the start position
         memset(&state, 0, sizeof(struct hwstate));
         state.PC = CONST_MEMORY_START_PROGRAM;
+        // Set up fonts
+        setup_fonts();
 
         // Reading the program in the buffer in the common starting location
         bytesRead = (__uint16_t) fread(state.mem + CONST_MEMORY_START_PROGRAM, 1, CONST_MEMORY_SIZE_PROGRAM, inputFile);
