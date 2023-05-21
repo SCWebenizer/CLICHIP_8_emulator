@@ -9,7 +9,7 @@
 
 
 /* Constant values */
-#define CONST_STEPS_COUNT 1000
+#define CONST_STEPS_COUNT 2000
 
 #define CONST_ARGC 2
 #define CONST_OK 0
@@ -83,6 +83,38 @@ struct hwstate
 
 
 /* Functions */
+/* Tries to simulate the hex keyboard. Should be replaced by something better */
+__uint8_t get_keyboard_input(void)
+{
+        __uint8_t digit;
+
+        printf("Waiting for hex digit input...\n");
+
+        digit = getchar();
+        while((digit < '0' && digit > '9')
+                || (digit < 'a' && digit > 'f')
+                || (digit < 'A' && digit > 'F'))
+        {
+                printf("Invalid hex input, try again\n");
+                digit = getchar();
+        }
+
+        if (digit >= '0' && digit <= '9')
+        {
+                digit -= '0';
+        }
+        else if (digit < 'a' && digit > 'f')
+        {
+                digit -= 'a';
+        }
+        else
+        {
+                digit -= 'A';
+        }
+
+        return digit;
+}
+
 /* Prints the display */
 static inline void print_display(void)
 {
@@ -509,11 +541,13 @@ void execute_instruction(void)
                         {
                                 case 0x009E:
                                         // EX9E - Skips the next instruction if the key stored in VX is pressed
+                                        // Assume to be like the other instruction skipping opcodes
                                         printf("if (key() == V%01x)", (instruction & 0x0F00) >> 8);
                                         // TODO
                                         break;
                                 case 0x00A1:
                                         // EXA1 - Skips the next instruction if the key stored in VX is not pressed
+                                        // Assume to be like the other instruction skipping opcodes
                                         printf("if (key() != V%01x)", (instruction & 0x0F00) >> 8);
                                         // TODO
                                         break;
@@ -533,8 +567,10 @@ void execute_instruction(void)
                                         break;
                                 case 0x000A:
                                         // FX0A - A key press is awaited, and then stored in VX (blocking operation, all instruction halted until next key event)
-                                        printf("V%01x = get_key()", (instruction & 0x0F00) >> 8);
-                                        // TODO
+                                        regX = get_regX(instruction);
+                                        printf("V%01x = get_key() [X]", regX);
+                                        state.regs.regV[regX] = get_keyboard_input();
+                                        state.PC += CONST_REGISTERS_IR_INCREMENT;
                                         break;
                                 case 0x0015:
                                         // FX15 - Sets the delay timer to VX
@@ -561,11 +597,8 @@ void execute_instruction(void)
                                         {
                                                 printf("\nValue from register is bigger than 0x0F, looking only at the least significant hex digit\n");
                                         }
-                                        // else
-                                        // {
                                         state.regs.regI = (state.regs.regV[regX] % CONST_OPCODE_REGISTER_MASK) * 5;
                                         state.PC += CONST_REGISTERS_IR_INCREMENT;
-                                        // }
                                         break;
                                 case 0x0033:
                                         // FX33 - Stores the binary-coded decimal representation of VX, with the hundreds digit in memory at location in I, the tens digit at location I+1, and the ones digit at location I+2
