@@ -510,8 +510,10 @@ void execute_instruction(void)
                                         break;
                                 case 0x001E:
                                         // FX1E - Adds VX to I. VF is not affected
+                                        regX = get_regX(instruction);
                                         printf("I += V%01x", (instruction & 0x0F00) >> 8);
-                                        // TODO
+                                        state.regs.regI += state.regs.regV[regX];
+                                        state.PC += CONST_REGISTERS_IR_INCREMENT;
                                         break;
                                 case 0x0029:
                                         // FX29 - Sets I to the location of the sprite for the character in VX
