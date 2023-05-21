@@ -9,7 +9,7 @@
 
 
 /* Constant values */
-#define CONST_STEPS_COUNT 712
+#define CONST_STEPS_COUNT 1000
 
 #define CONST_ARGC 2
 #define CONST_OK 0
@@ -28,6 +28,15 @@
 #define CONST_MEMORY_END_PROGRAM (CONST_MEMORY_START_RESERVED - 1)
 #define CONST_MEMORY_SIZE_PROGRAM (CONST_MEMORY_END_PROGRAM - CONST_MEMORY_START_PROGRAM)
 
+#define CONST_DISPLAY_SIZE_X 64
+// Formatting with a delimiter column and newline
+#define CONST_DISPLAY_SIZE_X_WITH_FORMATTING (CONST_DISPLAY_SIZE_X + 2)
+#define CONST_DISPLAY_SIZE_Y 32
+// Formatting with two delimiter lines
+#define CONST_DISPLAY_SIZE_Y_WITH_FORMATTING (CONST_DISPLAY_SIZE_Y + 2)
+#define CONST_DISPLAY_SIZE_BUFFER (CONST_DISPLAY_SIZE_X_WITH_FORMATTING * CONST_DISPLAY_SIZE_Y_WITH_FORMATTING)
+#define CONST_DISPLAY_CHARACTER_SET '#'
+#define CONST_DISPLAY_CHARACTER_UNSET ' '
 
 #define CONST_REGISTERS_COUNT 16  // Amount of 8-bit registers
 #define CONST_OPCODE_POSITION 12  // Instructions are 2 bytes long, we want the 4 most significant bits from 2 bytes
@@ -58,6 +67,8 @@ struct hwregs
 struct hwstate
 {
         __uint8_t mem[CONST_MEMORY_SIZE_TOTAL];
+        // Display color is monochrome, 64 pixels width with 32 pixels height
+        __uint64_t display[CONST_DISPLAY_SIZE_Y];
         struct hwregs regs;
         __uint16_t PC;
 } state;
@@ -66,6 +77,106 @@ struct hwstate
 
 
 /* Functions */
+/* Prints the display */
+static inline void print_display(void)
+{
+        __uint8_t line, idx, buffer[CONST_DISPLAY_SIZE_BUFFER + 1];
+
+        // Initial print buffer setup
+        buffer[CONST_DISPLAY_SIZE_BUFFER] = 0;
+        memset(buffer, CONST_DISPLAY_CHARACTER_UNSET, CONST_DISPLAY_SIZE_BUFFER);
+
+        // Draw the screen frames
+        for (idx = 0; idx < CONST_DISPLAY_SIZE_X; idx++)
+        {
+                buffer[idx] = '-';
+                buffer[(CONST_DISPLAY_SIZE_Y_WITH_FORMATTING - 1) * CONST_DISPLAY_SIZE_X_WITH_FORMATTING + idx] = '-';
+        }
+        for (idx = 0; idx < CONST_DISPLAY_SIZE_Y_WITH_FORMATTING; idx++)
+        {
+                buffer[CONST_DISPLAY_SIZE_X_WITH_FORMATTING * (idx + 1) - 2] = '|';
+                buffer[CONST_DISPLAY_SIZE_X_WITH_FORMATTING * (idx + 1) - 1] = '\n';
+        }
+
+        // Fill in the actual screen lines
+        for (line = 0; line < CONST_DISPLAY_SIZE_Y; line++)
+        {
+                // Start at idx = 0 because there's no screen frame on the left side
+                // Stop at idx < CONST_DISPLAY_SIZE_X because:
+                // - the character at CONST_DISPLAY_SIZE_X is a line delimiter character for the screen frame
+                // - the character at CONST_DISPLAY_SIZE_X + 1 is a newline
+                for (idx = 0; idx < CONST_DISPLAY_SIZE_X; idx++)
+                {
+                        // A display line is a 64-bit number, use bitwise operations to fill the buffer
+                        if (((state.display[line] >> idx) & 1) == 1)
+                        {
+                                // Bit is set, pixel is solid white
+                                buffer[(line + 1) * CONST_DISPLAY_SIZE_X_WITH_FORMATTING + (CONST_DISPLAY_SIZE_X - idx - 1)] = CONST_DISPLAY_CHARACTER_SET;
+                        }
+                        else
+                        {
+                                // Bit is not set, pixel is solid black
+                                buffer[(line + 1) * CONST_DISPLAY_SIZE_X_WITH_FORMATTING + (CONST_DISPLAY_SIZE_X - idx - 1)] = CONST_DISPLAY_CHARACTER_UNSET;
+                        }
+                }
+        }
+
+        printf("\n%s\n", buffer);
+}
+
+/* Updates the display with the sprite drawing information. Draws a sprite at coordinate (pos_x, pos_y) that has a width of 8 pixels and a height of n pixels */
+void draw(__uint8_t pos_x, __uint8_t pos_y, __uint8_t n)
+{
+        (void) n;
+        __uint8_t idx;
+        __uint64_t data;
+        __int8_t shifts;
+
+        // TODO "Sprite pixels that are set flip the color of the corresponding screen pixel, while unset sprite pixels do nothing"
+        // SO DOES IT MEAN I SHOULD LOOK ONLY AT THE SET BITS AND IGNORE THE UNSET BITS ?
+        for (idx = 0; idx < n; idx++)
+        {
+                // Read the sprite data starting from I value location
+                // TODO CHECK REGARDING LITTLE/BIG ENDIAN
+                data = ((__uint64_t) state.mem[state.regs.regI + idx]);
+                shifts = CONST_DISPLAY_SIZE_X - pos_x - 8;
+
+                // printf("[%d] Data %01lx to be shifted %d bits\n", idx, data, shifts);
+                // for (__int8_t i = 7; i >= 0; i--)
+                // {
+                //         printf("%c", '0' + (__uint8_t) ((data >> i) & 1));
+                // }
+                // printf("\n");
+                if (shifts > 0)
+                {
+                        data = ((__uint64_t) state.mem[state.regs.regI + idx]) << shifts;
+                }
+                else
+                {
+                        data = ((__uint64_t) state.mem[state.regs.regI + idx]) >> (-shifts);
+                }
+
+                // VF is set to 1 if any screen pixels are flipped from set to unset when the sprite is drawn, and 0 if not
+                if ((state.display[pos_y + idx] & data) > 0)
+                {
+                        // Pixel goes from set to unset
+                        state.regs.regV[CONST_REGISTERS_VF_INDEX] = 1;
+                }
+
+                state.display[pos_y + idx] ^= data;
+        }
+
+        // printf("DEBUG:\n");
+        // for (idx = 0; idx < CONST_DISPLAY_SIZE_Y; idx++)
+        // {
+        //         for (__int8_t i = CONST_DISPLAY_SIZE_X - 1; i >= 0; i--)
+        //         {
+        //                 printf("%c", '0' + (__uint8_t) ((state.display[idx] >> i) & 1));
+        //         }
+        //         printf("\n");
+        // }
+}
+
 /* Returns the 12-bit address from an instruction */
 static inline __uint16_t get_address(__uint16_t instruction)
 {
@@ -84,10 +195,17 @@ static inline __uint8_t get_regY(__uint16_t instruction)
         return (instruction >> CONST_OPCODE_REGISTER_Y_OFFSET) & CONST_OPCODE_REGISTER_MASK;
 }
 
-/* Returns the last 2 most significant bytes from an instruction, representing the data */
-static inline __uint8_t get_data(__uint16_t instruction)
+/* Returns the last 2 or 1 most significant bytes from an instruction, representing the data */
+static inline __uint8_t get_data(__uint16_t instruction, __uint8_t only_one)
 {
-        return instruction & CONST_OPCODE_DATA_MASK;
+        if (only_one == 1)
+        {
+                return instruction & CONST_OPCODE_REGISTER_MASK;
+        }
+        else
+        {
+                return instruction & CONST_OPCODE_DATA_MASK;
+        }
 }
 
 /* Returns the instruction from the current PC pointer location in the memory */
@@ -115,7 +233,8 @@ void execute_instruction(void)
                                 case 0x00E0:
                                         // 00E0 - Clears the screen
                                         printf("disp_clear()");
-                                        // TODO
+                                        memset(state.display, 0, sizeof(__uint64_t) * CONST_DISPLAY_SIZE_Y);
+                                        state.PC += CONST_REGISTERS_IR_INCREMENT;
                                         break;
                                 case 0x00EE:
                                         // 00EE - Returns from a subroutine
@@ -143,7 +262,7 @@ void execute_instruction(void)
                 case 0x3:
                         // 3XNN - Skips the next instruction if VX equals NN
                         regX = get_regX(instruction);
-                        data = get_data(instruction);
+                        data = get_data(instruction, 0);
                         printf("if (V%01x<%02x> == %02x)", regX, state.regs.regV[regX], data);
                         if (state.regs.regV[regX] == data)
                         {
@@ -159,7 +278,7 @@ void execute_instruction(void)
                 case 0x4:
                         // 4XNN - Skips the next instruction if VX does not equal NN
                         regX = get_regX(instruction);
-                        data = get_data(instruction);
+                        data = get_data(instruction, 0);
                         printf("if (V%01x<%02x> != %02x)",regX, state.regs.regV[regX], data);
                         if (state.regs.regV[regX] != data)
                         {
@@ -191,7 +310,7 @@ void execute_instruction(void)
                 case 0x6:
                         // 6XNN - Sets VX to NN
                         regX = get_regX(instruction);
-                        data = get_data(instruction);
+                        data = get_data(instruction, 0);
                         printf("V%01x<%02x> = %02x [X]", regX, state.regs.regV[regX], data);
                         state.regs.regV[regX] = data;
                         state.PC += CONST_REGISTERS_IR_INCREMENT;
@@ -199,7 +318,7 @@ void execute_instruction(void)
                 case 0x7:
                         // 7XNN - Adds NN to VX (carry flag is not changed)
                         regX = get_regX(instruction);
-                        data = get_data(instruction);
+                        data = get_data(instruction, 0);
                         printf("V%01x<%02x> += %02x [X]", regX, state.regs.regV[regX], data);
                         state.regs.regV[regX] += data;
                         state.PC += CONST_REGISTERS_IR_INCREMENT;
@@ -328,7 +447,7 @@ void execute_instruction(void)
                 case 0xC:
                         // CXNN - Sets VX to the result of a bitwise and operation on a random number (Typically: 0 to 255) and NN
                         regX = get_regX(instruction);
-                        data = get_data(instruction);
+                        data = get_data(instruction, 0);
                         __uint8_t tmp = (__uint8_t) rand();
                         printf("V%01x<%02x> = rand()<%02x> & %02x", regX, state.regs.regV[regX], tmp, data);
                         state.regs.regV[regX] = tmp & data;
@@ -337,8 +456,14 @@ void execute_instruction(void)
                         break;
                 case 0xD:
                         // DXYN - Draws a sprite at coordinate (VX, VY) that has a width of 8 pixels and a height of N pixels
-                        printf("draw(V%01x, V%01x, %01x)", (instruction & 0x0F00) >> 8, (instruction & 0x00F0) >> 4, instruction & 0x000F);
-                        // TODO
+                        regX = get_regX(instruction);
+                        regY = get_regY(instruction);
+                        data = get_data(instruction, 1);
+                        printf("draw(V%01x<%02x>, V%01x<%02x>, %01x)", regX, state.regs.regV[regX], regY, state.regs.regV[regY], data);
+                        draw(state.regs.regV[regX], state.regs.regV[regY], data);
+                        // Setting VF is handled by the function
+                        print_display();
+                        state.PC += CONST_REGISTERS_IR_INCREMENT;
                         break;
                 case 0xE:
                         // Multiple cases.
